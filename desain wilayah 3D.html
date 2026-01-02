@@ -1,0 +1,832 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Visualisasi Wilayah Digital 3D</title>
+    <style>
+        /* --- RESET & BASIC SETUP --- */
+        :root {
+            --primary: #00f2ff;
+            --secondary: #7000ff;
+            --accent: #ff0055;
+            --bg-dark: #050510;
+            --glass: rgba(10, 10, 25, 0.65);
+            --border: rgba(255, 255, 255, 0.1);
+            --text-main: #ffffff;
+            --text-muted: #a0a0b0;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+        }
+
+        body {
+            overflow: hidden;
+            background-color: var(--bg-dark);
+            color: var(--text-main);
+        }
+
+        /* --- 3D CANVAS CONTAINER --- */
+        #canvas-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+            outline: none;
+        }
+
+        /* --- UI OVERLAY LAYER --- */
+        #ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 10;
+            pointer-events: none; /* Biarkan klik tembus ke canvas 3D */
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }
+
+        /* --- HEADER --- */
+        header {
+            padding: 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: linear-gradient(to bottom, rgba(0,0,0,0.8), transparent);
+            pointer-events: auto;
+        }
+
+        .logo {
+            font-size: 1.5rem;
+            font-weight: 800;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            color: var(--primary);
+            text-shadow: 0 0 10px rgba(0, 242, 255, 0.5);
+        }
+
+        .logo span {
+            color: var(--text-main);
+        }
+
+        nav ul {
+            display: flex;
+            gap: 2rem;
+            list-style: none;
+        }
+
+        nav a {
+            color: var(--text-main);
+            text-decoration: none;
+            font-weight: 500;
+            font-size: 0.9rem;
+            position: relative;
+            padding-bottom: 5px;
+            transition: color 0.3s;
+        }
+
+        nav a::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 0%;
+            height: 2px;
+            background: var(--accent);
+            transition: width 0.3s;
+        }
+
+        nav a:hover {
+            color: var(--primary);
+        }
+
+        nav a:hover::after {
+            width: 100%;
+        }
+
+        /* --- MAIN CONTENT PANELS --- */
+        main {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-end;
+            padding: 2rem;
+            height: 100%;
+            pointer-events: none;
+        }
+
+        /* Sidebar Info Panel */
+        .info-panel {
+            width: 350px;
+            background: var(--glass);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 1.5rem;
+            pointer-events: auto;
+            transform: translateX(-50px);
+            opacity: 0;
+            animation: slideInLeft 0.8s forwards 0.5s;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+        }
+
+        .panel-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 1rem;
+            border-bottom: 1px solid var(--border);
+            padding-bottom: 1rem;
+        }
+
+        .status-dot {
+            width: 10px;
+            height: 10px;
+            background: var(--primary);
+            border-radius: 50%;
+            box-shadow: 0 0 8px var(--primary);
+            animation: pulse 2s infinite;
+        }
+
+        .location-title {
+            font-size: 1.2rem;
+            font-weight: 700;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .stat-item {
+            background: rgba(255,255,255,0.05);
+            padding: 0.8rem;
+            border-radius: 8px;
+        }
+
+        .stat-label {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            margin-bottom: 4px;
+        }
+
+        .stat-value {
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: var(--primary);
+        }
+
+        .description {
+            font-size: 0.9rem;
+            line-height: 1.6;
+            color: var(--text-muted);
+            margin-bottom: 1.5rem;
+        }
+
+        .action-btn {
+            width: 100%;
+            padding: 0.8rem;
+            border: none;
+            background: linear-gradient(45deg, var(--secondary), var(--accent));
+            color: white;
+            font-weight: 600;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+            text-transform: uppercase;
+            font-size: 0.85rem;
+            letter-spacing: 1px;
+        }
+
+        .action-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 15px rgba(255, 0, 85, 0.4);
+        }
+
+        /* Controls Hint */
+        .controls-hint {
+            position: absolute;
+            bottom: 2rem;
+            right: 2rem;
+            background: var(--glass);
+            padding: 0.8rem 1.2rem;
+            border-radius: 30px;
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            pointer-events: auto;
+            border: 1px solid var(--border);
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .mouse-icon {
+            width: 16px;
+            height: 16px;
+            border: 1px solid var(--text-muted);
+            border-radius: 8px;
+            position: relative;
+        }
+
+        .mouse-icon::before {
+            content: '';
+            position: absolute;
+            top: 3px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 2px;
+            height: 4px;
+            background: var(--text-muted);
+        }
+
+        /* --- LABELS IN 3D SPACE --- */
+        .world-label {
+            position: absolute;
+            background: rgba(0, 0, 0, 0.6);
+            color: white;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.3s;
+            transform: translate(-50%, -150%);
+            white-space: nowrap;
+            border: 1px solid var(--primary);
+        }
+
+        .world-label::after {
+            content: '';
+            position: absolute;
+            bottom: -5px;
+            left: 50%;
+            transform: translateX(-50%);
+            border-left: 5px solid transparent;
+            border-right: 5px solid transparent;
+            border-top: 5px solid var(--primary);
+        }
+
+        /* --- ANIMATIONS --- */
+        @keyframes slideInLeft {
+            to { transform: translateX(0); opacity: 1; }
+        }
+
+        @keyframes pulse {
+            0% { opacity: 0.5; box-shadow: 0 0 0 0 rgba(0, 242, 255, 0.4); }
+            70% { opacity: 1; box-shadow: 0 0 0 10px rgba(0, 242, 255, 0); }
+            100% { opacity: 0.5; box-shadow: 0 0 0 0 rgba(0, 242, 255, 0); }
+        }
+
+        /* --- LOADING SCREEN --- */
+        #loader {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: var(--bg-dark);
+            z-index: 100;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+            transition: opacity 0.5s;
+        }
+
+        .spinner {
+            width: 50px;
+            height: 50px;
+            border: 3px solid rgba(255,255,255,0.1);
+            border-radius: 50%;
+            border-top-color: var(--primary);
+            animation: spin 1s ease-in-out infinite;
+            margin-bottom: 1rem;
+        }
+
+        .loading-text {
+            color: var(--primary);
+            letter-spacing: 2px;
+            font-size: 0.9rem;
+            animation: blink 1.5s infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        @keyframes blink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .info-panel {
+                width: 90%;
+                margin: 0 auto;
+                transform: translateY(50px);
+                animation: slideInUp 0.8s forwards 0.5s;
+            }
+            main {
+                align-items: flex-end;
+                padding-bottom: 4rem;
+            }
+            @keyframes slideInUp {
+                to { transform: translateY(0); opacity: 1; }
+            }
+            header {
+                padding: 1rem;
+            }
+            .logo { font-size: 1.2rem; }
+            nav { display: none; } /* Simplified for mobile */
+        }
+    </style>
+    
+    <!-- Three.js from CDN -->
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+            }
+        }
+    </script>
+</head>
+<body>
+
+    <!-- Loading Screen -->
+    <div id="loader">
+        <div class="spinner"></div>
+        <div class="loading-text">MEMUAT WILAYAH 3D...</div>
+    </div>
+
+    <!-- 3D Canvas -->
+    <div id="canvas-container"></div>
+
+    <!-- Floating Labels Container -->
+    <div id="labels-container"></div>
+
+    <!-- UI Overlay -->
+    <div id="ui-layer">
+        <header>
+            <div class="logo">Nusa<span>View</span></div>
+            <nav>
+                <ul>
+                    <li><a href="#" onclick="resetCamera()">Beranda</a></li>
+                    <li><a href="#" onclick="focusLocation(0)">Pusat Kota</a></li>
+                    <li><a href="#" onclick="focusLocation(1)">Kawasan Hijau</a></li>
+                    <li><a href="#" onclick="focusLocation(2)">Pelabuhan</a></li>
+                </ul>
+            </nav>
+        </header>
+
+        <main>
+            <!-- Sidebar Information -->
+            <section class="info-panel">
+                <div class="panel-header">
+                    <div class="status-dot"></div>
+                    <div class="location-title" id="panel-title">Selamat Datang</div>
+                </div>
+                
+                <div class="stats-grid">
+                    <div class="stat-item">
+                        <div class="stat-label">Penduduk</div>
+                        <div class="stat-value" id="stat-pop">--</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-label">Luas (km²)</div>
+                        <div class="stat-value" id="stat-area">--</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-label">Kepadatan</div>
+                        <div class="stat-value" id="stat-density">--</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-label">Indeks</div>
+                        <div class="stat-value" style="color:var(--accent)">A+</div>
+                    </div>
+                </div>
+
+                <p class="description" id="panel-desc">
+                    Silakan klik pada area yang ditandai atau gunakan navigasi di atas untuk menjelajahi berbagai zona wilayah dalam tampilan 3D interaktif.
+                </p>
+
+                <button class="action-btn" onclick="simulateAction()">Lihat Detail Laporan</button>
+            </section>
+
+            <!-- Controls Hint -->
+            <div class="controls-hint">
+                <div class="mouse-icon"></div>
+                <span>Klik & Tarik untuk Rotasi • Scroll untuk Zoom</span>
+            </div>
+        </main>
+    </div>
+
+    <!-- MAIN SCRIPT -->
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+        import TWEEN from 'three/addons/libs/tween.module.js';
+
+        // --- KONFIGURASI DATA WILAYAH ---
+        const locations = [
+            {
+                id: 0,
+                title: "Pusat Bisnis Grand City",
+                desc: "Jantung ekonomi wilayah ini yang dipenuhi oleh pencakar langit modern, pusat perbelanjaan, dan distrik finansial. Terdapat integrasi transportasi massal yang efisien.",
+                pop: "1.2 Jt",
+                area: "45.2",
+                density: "Tinggi",
+                color: 0x00f2ff,
+                position: { x: 0, y: 5, z: 0 }
+            },
+            {
+                id: 1,
+                title: "Taman Ekologi Hijau",
+                desc: "Area resapan air dan konservasi alam di tengah kota. Menjadi paru-paru kota dengan lebih dari 5000 jenis tanaman dan jalur sepeda yang menghubungkan ke setiap distrik.",
+                pop: "50 Rb",
+                area: "120.5",
+                density: "Rendah",
+                color: 0x00ff88,
+                position: { x: -30, y: 2, z: 20 }
+            },
+            {
+                id: 2,
+                title: "Zona Pelabuhan Laut",
+                desc: "Hub logistik internasional dengan fasilitas terminal peti kemas otomatis. Menghubungkan wilayah ini dengan pasar global melalui jalur laut utama.",
+                pop: "200 Rb",
+                area: "85.0",
+                density: "Sedang",
+                color: 0xff0055,
+                position: { x: 35, y: 3, z: -20 }
+            }
+        ];
+
+        let currentLocationIndex = -1;
+
+        // --- SETUP SCENE ---
+        const container = document.getElementById('canvas-container');
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x050510);
+        scene.fog = new THREE.FogExp2(0x050510, 0.015); // Efek kabut untuk kedalaman
+
+        // Kamera
+        const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 1, 1000);
+        camera.position.set(60, 40, 60);
+
+        // Renderer
+        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(window.devicePixelRatio);
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        container.appendChild(renderer.domElement);
+
+        // Kontrol Orbit
+        const controls = new OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.05;
+        controls.maxPolarAngle = Math.PI / 2 - 0.1; // Mencegah kamera masuk ke bawah tanah
+        controls.minDistance = 20;
+        controls.maxDistance = 150;
+        controls.autoRotate = true;
+        controls.autoRotateSpeed = 0.5;
+
+        // --- PENCAHAYAAN ---
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.4);
+        scene.add(ambientLight);
+
+        const dirLight = new THREE.DirectionalLight(0xffffff, 1);
+        dirLight.position.set(50, 80, 30);
+        dirLight.castShadow = true;
+        dirLight.shadow.mapSize.width = 2048;
+        dirLight.shadow.mapSize.height = 2048;
+        scene.add(dirLight);
+
+        // Lampu aksen warna-warni (Cyberpunk vibe)
+        const pointLight1 = new THREE.PointLight(0x00f2ff, 2, 100);
+        pointLight1.position.set(0, 20, 0);
+        scene.add(pointLight1);
+
+        const pointLight2 = new THREE.PointLight(0xff0055, 2, 100);
+        pointLight2.position.set(30, 10, 30);
+        scene.add(pointLight2);
+
+        // --- PEMBUATAN OBJEK 3D (WILAYAH) ---
+
+        const cityGroup = new THREE.Group();
+        scene.add(cityGroup);
+
+        // 1. Tanah Dasar
+        const planeGeometry = new THREE.PlaneGeometry(200, 200);
+        const planeMaterial = new THREE.MeshStandardMaterial({ 
+            color: 0x0a0a15, 
+            roughness: 0.8,
+            metalness: 0.2
+        });
+        const plane = new THREE.Mesh(planeGeometry, planeMaterial);
+        plane.rotation.x = -Math.PI / 2;
+        plane.receiveShadow = true;
+        cityGroup.add(plane);
+
+        // Grid Helper (Gaya Digital)
+        const gridHelper = new THREE.GridHelper(200, 50, 0x1f1f3a, 0x111122);
+        cityGroup.add(gridHelper);
+
+        // 2. Gedung-gedung Prosedural (Membuat peta kota palsu)
+        const buildingGeo = new THREE.BoxGeometry(1, 1, 1);
+        // Translasi geometri agar pivotnya ada di bawah (y=0)
+        buildingGeo.translate(0, 0.5, 0); 
+
+        const buildMatBase = new THREE.MeshStandardMaterial({ color: 0x222244 });
+        const buildMatHigh = new THREE.MeshStandardMaterial({ color: 0x00f2ff, emissive: 0x004455, emissiveIntensity: 0.2 });
+        const buildMatPark = new THREE.MeshStandardMaterial({ color: 0x114422 });
+
+        // Fungsi helper untuk membuat gedung
+        function createBuilding(x, z, w, h, d, material) {
+            const mesh = new THREE.Mesh(buildingGeo, material);
+            mesh.position.set(x, 0, z);
+            mesh.scale.set(w, h, d);
+            mesh.castShadow = true;
+            mesh.receiveShadow = true;
+            
+            // Tepian bercahaya (Wireframe glow)
+            const edges = new THREE.EdgesGeometry(new THREE.BoxGeometry(w, h, d));
+            const lineMat = new THREE.LineBasicMaterial({ color: 0x00f2ff, transparent: true, opacity: 0.1 });
+            const wireframe = new THREE.LineSegments(edges, lineMat);
+            wireframe.position.set(x, h/2, z);
+            
+            cityGroup.add(mesh);
+            if (h > 5) cityGroup.add(wireframe); // Hanya gedung tinggi yang punya glow
+        }
+
+        // Generate Kota secara acak
+        for (let i = 0; i < 150; i++) {
+            const x = (Math.random() - 0.5) * 160;
+            const z = (Math.random() - 0.5) * 160;
+            
+            // Hindari area tengah (untuk landmark khusus nanti)
+            const distToCenter = Math.sqrt(x*x + z*z);
+            if (distToCenter < 10) continue;
+
+            const w = Math.random() * 3 + 1;
+            const d = Math.random() * 3 + 1;
+            let h = Math.random() * 8 + 1; // Tinggi random
+
+            // Buat zona khusus berdasarkan posisi
+            let mat = buildMatBase;
+            
+            // Zona Hijau (kiri atas)
+            if (x < -10 && z > 10) {
+                h = Math.random() * 1 + 0.5;
+                mat = buildMatPark;
+            } 
+            // Zona Industri/Pelabuhan (kanan bawah)
+            else if (x > 10 && z < -10) {
+                h = Math.random() * 5 + 2;
+                mat = new THREE.MeshStandardMaterial({ color: 0x443322 });
+            }
+            // Pusat Kota (sekitar tengah)
+            else if (distToCenter < 40) {
+                h = Math.random() * 20 + 10; // Gedung lebih tinggi
+                mat = Math.random() > 0.5 ? buildMatHigh : buildMatBase;
+            }
+
+            createBuilding(x, z, w, h, d, mat);
+        }
+
+        // --- MARKER / POI (POINT OF INTEREST) ---
+        const markersGroup = new THREE.Group();
+        scene.add(markersGroup);
+        const labels = [];
+
+        locations.forEach((loc) => {
+            // Marker Fisik di 3D
+            const markerGeo = new THREE.CylinderGeometry(0.5, 0.5, 100, 8);
+            markerGeo.translate(0, 50, 0); // Panjang sinar ke atas
+            const markerMat = new THREE.MeshBasicMaterial({ 
+                color: loc.color, 
+                transparent: true, 
+                opacity: 0.3,
+                blending: THREE.AdditiveBlending,
+                depthWrite: false
+            });
+            const marker = new THREE.Mesh(markerGeo, markerMat);
+            marker.position.set(loc.position.x, loc.position.y, loc.position.z);
+            marker.userData = { id: loc.id }; // Simpan ID referensi
+            markersGroup.add(marker);
+
+            // Cincin dasar marker
+            const ringGeo = new THREE.RingGeometry(1, 1.5, 32);
+            ringGeo.rotateX(-Math.PI / 2);
+            const ringMat = new THREE.MeshBasicMaterial({ color: loc.color, side: THREE.DoubleSide });
+            const ring = new THREE.Mesh(ringGeo, ringMat);
+            ring.position.set(loc.position.x, 0.2, loc.position.z);
+            markersGroup.add(ring);
+
+            // Animasi cincin
+            new TWEEN.Tween(ring.scale)
+                .to({ x: 2, y: 2 }, 2000)
+                .easing(TWEEN.Easing.Quadratic.Out)
+                .yoyo(true)
+                .repeat(Infinity)
+                .start();
+            
+            new TWEEN.Tween(ring.material)
+                .to({ opacity: 0 }, 2000)
+                .yoyo(true)
+                .repeat(Infinity)
+                .start();
+
+            // Buat elemen label HTML
+            const labelDiv = document.createElement('div');
+            labelDiv.className = 'world-label';
+            labelDiv.textContent = loc.title;
+            document.getElementById('labels-container').appendChild(labelDiv);
+            
+            labels.push({
+                element: labelDiv,
+                position: new THREE.Vector3(loc.position.x, loc.position.y + 5, loc.position.z)
+            });
+        });
+
+        // --- RAYCASTER (INTERAKSI KLIK) ---
+        const raycaster = new THREE.Raycaster();
+        const mouse = new THREE.Vector2();
+
+        window.addEventListener('mousedown', onMouseDown, false);
+
+        function onMouseDown(event) {
+            // Hitung koordinat mouse normalized
+            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+
+            raycaster.setFromCamera(mouse, camera);
+
+            // Cek tabrakan dengan marker
+            const intersects = raycaster.intersectObjects(markersGroup.children);
+
+            if (intersects.length > 0) {
+                // Cari parent object yang punya userData ID
+                let target = intersects[0].object;
+                while(!target.userData.id && target.parent) {
+                    target = target.parent;
+                }
+                
+                if (target.userData.id !== undefined) {
+                    focusLocation(target.userData.id);
+                }
+            }
+        }
+
+        // --- LOGIKA UI & KAMERA ---
+        
+        // Fungsi Global (dipanggil dari HTML)
+        window.focusLocation = function(index) {
+            const loc = locations[index];
+            if (!loc) return;
+
+            currentLocationIndex = index;
+
+            // 1. Update UI Panel
+            const panel = document.querySelector('.info-panel');
+            
+            // Animasi simpel panel refresh
+            panel.style.transform = "translateX(-20px)";
+            panel.style.opacity = "0.5";
+            
+            setTimeout(() => {
+                document.getElementById('panel-title').textContent = loc.title;
+                document.getElementById('panel-desc').textContent = loc.desc;
+                document.getElementById('stat-pop').textContent = loc.pop;
+                document.getElementById('stat-area').textContent = loc.area;
+                document.getElementById('stat-density').textContent = loc.density;
+                
+                // Ganti warna aksen
+                document.documentElement.style.setProperty('--primary', '#' + loc.color.toString(16).padStart(6, '0'));
+                
+                panel.style.transform = "translateX(0)";
+                panel.style.opacity = "1";
+            }, 200);
+
+            // 2. Gerakkan Kamera
+            const targetPos = {
+                x: loc.position.x + 20, // Offset kamera
+                y: loc.position.y + 15,
+                z: loc.position.z + 20
+            };
+
+            new TWEEN.Tween(camera.position)
+                .to(targetPos, 1500)
+                .easing(TWEEN.Easing.Cubic.Out)
+                .onUpdate(() => controls.update())
+                .start();
+
+            new TWEEN.Tween(controls.target)
+                .to({ x: loc.position.x, y: loc.position.y, z: loc.position.z }, 1500)
+                .easing(TWEEN.Easing.Cubic.Out)
+                .start();
+
+            // Hentikan auto rotate saat user interact
+            controls.autoRotate = false;
+        };
+
+        window.resetCamera = function() {
+            currentLocationIndex = -1;
+            controls.autoRotate = true;
+            
+            new TWEEN.Tween(camera.position)
+                .to({ x: 60, y: 40, z: 60 }, 1500)
+                .easing(TWEEN.Easing.Cubic.Out)
+                .start();
+            
+            new TWEEN.Tween(controls.target)
+                .to({ x: 0, y: 0, z: 0 }, 1500)
+                .easing(TWEEN.Easing.Cubic.Out)
+                .start();
+            
+            // Reset UI
+            document.getElementById('panel-title').textContent = "Selamat Datang";
+            document.getElementById('panel-desc').textContent = "Silakan klik pada area yang ditandai atau gunakan navigasi di atas untuk menjelajahi berbagai zona wilayah dalam tampilan 3D interaktif.";
+            document.getElementById('stat-pop').textContent = "--";
+            document.getElementById('stat-area').textContent = "--";
+            document.getElementById('stat-density').textContent = "--";
+        };
+        
+        window.simulateAction = function() {
+            alert("Membuka laporan detail wilayah...");
+        };
+
+        // --- ANIMATION LOOP ---
+        const clock = new THREE.Clock();
+
+        function animate() {
+            requestAnimationFrame(animate);
+            
+            const delta = clock.getDelta();
+            
+            TWEEN.update();
+            controls.update();
+
+            // Animasi marker (berputar)
+            markersGroup.children.forEach((child, idx) => {
+                if (child.type === "Mesh") { // Hanya mesh marker yang diputar
+                   // child.rotation.y += delta; 
+                }
+            });
+
+            // Update posisi Label HTML agar mengikuti objek 3D
+            labels.forEach(labelData => {
+                const vector = labelData.position.clone();
+                vector.project(camera);
+
+                // Cek apakah objek ada di depan kamera
+                if (vector.z < 1) {
+                    const x = (vector.x * 0.5 + 0.5) * window.innerWidth;
+                    const y = (-(vector.y * 0.5) + 0.5) * window.innerHeight;
+
+                    labelData.element.style.transform = `translate(-50%, -50%)`;
+                    labelData.element.style.left = `${x}px`;
+                    labelData.element.style.top = `${y}px`;
+                    labelData.element.style.opacity = '1';
+                } else {
+                    labelData.element.style.opacity = '0';
+                }
+            });
+
+            renderer.render(scene, camera);
+        }
+
+        // --- HANDLE RESIZE ---
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        // --- START ---
+        // Hapus loading screen setelah 2 detik
+        window.onload = () => {
+            setTimeout(() => {
+                const loader = document.getElementById('loader');
+                loader.style.opacity = '0';
+                setTimeout(() => {
+                    loader.style.display = 'none';
+                    animate();
+                }, 500);
+            }, 1500);
+        };
+
+    </script>
+</body>
+</html>
